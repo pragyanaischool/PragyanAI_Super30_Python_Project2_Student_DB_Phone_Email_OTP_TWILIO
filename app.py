@@ -52,7 +52,8 @@ def logout():
 # Sidebar
 # -------------------------------
 with st.sidebar:
-    st.title("🎓 PragyanAI")
+    st.title(" PragyanAI")
+    st.image("")
     st.caption("Student Registration & Verification")
     if st.session_state.role:
         st.success(f"Logged in as {st.session_state.role.title()}")
@@ -63,7 +64,8 @@ with st.sidebar:
 # Admin Dashboard
 # -------------------------------
 def admin_dashboard():
-    st.title("🛡️ Admin Dashboard")
+    st.title(" Admin Dashboard")
+    st.image("")
     st.write("Review verified student accounts and update approval status.")
 
     rows = list_students()
@@ -88,7 +90,7 @@ def admin_dashboard():
     })
 
     new_status = st.selectbox("Approval Status", ["Pending", "Approved", "Rejected"], index=["Pending", "Approved", "Rejected"].index(row["approval_status"]))
-    if st.button("💾 Update Approval Status", type="primary"):
+    if st.button(" Update Approval Status", type="primary"):
         if new_status == "Approved" and not (row["email_verified"] and row["phone_verified"]):
             st.error("Student must have both Email and Phone verified before approval.")
         else:
@@ -101,7 +103,8 @@ def admin_dashboard():
 # -------------------------------
 def student_portal():
     row = get_student_by_email(st.session_state.student_email)
-    st.title("🎓 Student Portal")
+    st.title(" Student Portal")
+    st.image("")
     if not row:
         st.error("Student account not found.")
         return
@@ -225,7 +228,7 @@ with register_tab:
 
         st.subheader("Step 3 — Verify Phone")
         st.caption(f"SMS OTP will be sent to: {p['phone']}")
-        if st.button("📱 Send Phone OTP", key="send_phone"):
+        if st.button(" Send Phone OTP", key="send_phone"):
             try:
                 status = send_phone_otp(p["phone"])
                 st.success(f"Phone OTP sent. Twilio status: {status}")
@@ -249,7 +252,7 @@ with register_tab:
         v2.success("Phone Verified ✅" if st.session_state.phone_verified else "Phone Not Verified ❌")
 
         if st.session_state.email_verified and st.session_state.phone_verified:
-            if st.button("🚀 Save Student Account", type="primary", key="save_student"):
+            if st.button(" Save Student Account", type="primary", key="save_student"):
                 try:
                     create_student({**p, "email_verified": 1, "phone_verified": 1})
                     st.session_state.pending_student = None
