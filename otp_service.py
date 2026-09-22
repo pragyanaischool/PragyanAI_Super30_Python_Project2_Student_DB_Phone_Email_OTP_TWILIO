@@ -10,21 +10,26 @@
 # Configuration:
 #   Streamlit Secrets
 #
-# Expected .streamlit/secrets.toml:
+# Expected Streamlit Secrets:
 #
-# [email]
-# address = "your-email@gmail.com"
-# app_password = "your-gmail-app-password"
+# EMAIL_ADDRESS = "your-email@gmail.com"
+# EMAIL_APP_PASSWORD = "your-gmail-app-password"
 #
-# [twilio]
-# account_sid = "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-# auth_token = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-# verify_service_sid = "VAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# TWILIO_ACCOUNT_SID = "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# TWILIO_AUTH_TOKEN = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# TWILIO_VERIFY_SERVICE_SID = "VAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 #
+# ============================================================
+
+
+# ============================================================
+# IMPORTS
 # ============================================================
 
 import smtplib
 import re
+import secrets
+import time
 
 import streamlit as st
 
@@ -34,9 +39,21 @@ from email.mime.multipart import MIMEMultipart
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 
+
 # ============================================================
 # 1. LOAD SECRETS
 # ============================================================
+#
+# Your Streamlit Cloud Secrets are configured as:
+#
+# EMAIL_ADDRESS = "..."
+# EMAIL_APP_PASSWORD = "..."
+# TWILIO_ACCOUNT_SID = "..."
+# TWILIO_AUTH_TOKEN = "..."
+# TWILIO_VERIFY_SERVICE_SID = "..."
+#
+# ============================================================
+
 
 try:
 
@@ -44,28 +61,37 @@ try:
 
     EMAIL_APP_PASSWORD = st.secrets["EMAIL_APP_PASSWORD"]
 
-except Exception as e:
+except KeyError as e:
 
     raise RuntimeError(
         "Email configuration is missing from Streamlit Secrets. "
-        "Please configure [email] in .streamlit/secrets.toml."
+        "Please configure EMAIL_ADDRESS and "
+        "EMAIL_APP_PASSWORD."
     ) from e
 
 
 try:
 
-    TWILIO_ACCOUNT_SID = st.secrets["TWILIO_ACCOUNT_SID"]
+    TWILIO_ACCOUNT_SID = (
+        st.secrets["TWILIO_ACCOUNT_SID"]
+    )
 
-    TWILIO_AUTH_TOKEN = st.secrets["TWILIO_AUTH_TOKEN"]
+    TWILIO_AUTH_TOKEN = (
+        st.secrets["TWILIO_AUTH_TOKEN"]
+    )
 
     TWILIO_VERIFY_SERVICE_SID = (
-    st.secrets["TWILIO_VERIFY_SERVICE_SID"])
+        st.secrets["TWILIO_VERIFY_SERVICE_SID"]
+    )
 
-except Exception as e:
+except KeyError as e:
 
     raise RuntimeError(
-        "Twilio configuration is missing from Streamlit Secrets. "
-        "Please configure [twilio] in .streamlit/secrets.toml."
+        "Twilio configuration is missing from "
+        "Streamlit Secrets. "
+        "Please configure TWILIO_ACCOUNT_SID, "
+        "TWILIO_AUTH_TOKEN and "
+        "TWILIO_VERIFY_SERVICE_SID."
     ) from e
 
 
@@ -85,6 +111,9 @@ twilio_client = Client(
 
 OTP_LENGTH = 6
 
+# Email OTP validity:
+# 300 seconds = 5 minutes
+
 OTP_EXPIRY_SECONDS = 300
 
 SMTP_SERVER = "smtp.gmail.com"
@@ -99,6 +128,15 @@ SMTP_PORT = 587
 def validate_email(email: str) -> bool:
     """
     Validate email format.
+
+    Example:
+
+        student@gmail.com
+
+    Returns:
+
+        True  -> valid email
+        False -> invalid email
     """
 
     if not email:
@@ -131,6 +169,11 @@ def validate_phone(phone: str) -> bool:
     Example:
 
         +919876543210
+
+    Returns:
+
+        True  -> valid phone format
+        False -> invalid phone format
     """
 
     if not phone:
@@ -155,14 +198,12 @@ def validate_phone(phone: str) -> bool:
 
 def generate_otp() -> str:
     """
-    Generate a 6-digit OTP.
+    Generate a secure 6-digit OTP.
 
     Example:
 
         483921
     """
-
-    import secrets
 
     return "".join(
         str(
@@ -173,7 +214,108 @@ def generate_otp() -> str:
 
 
 # ============================================================
-# 7. SEND EMAIL OTP
+# 7. CHECK OTP VALIDITY / EXPIRY
+# ============================================================
+
+def otp_is_valid(otp_time) -> bool:
+    """
+    Check whether an OTP is still valid.
+
+    Parameters:
+        otp_time:
+            The timestamp at which the OTP was generated.
+
+            Example:
+
+                time.time()
+
+    Returns:
+        True:
+            OTP is still valid.
+
+        False:
+            OTP is expired or timestamp is invalid.
+
+    OTP validity:
+        5 minutes / 300 seconds
+    """
+
+    if otp_time is None:
+
+        return False
+
+    try:
+
+        elapsed_time = (
+            time.time()
+            - float(otp_time)
+        )
+
+        return (
+            elapsed_time
+            <= OTP_EXPIRY_SECONDS
+        )
+
+    except (
+        TypeError,
+        ValueError
+    ):
+
+        return False
+
+
+# ============================================================
+# 8. GET OTP REMAINING TIME
+# ============================================================
+
+def otp_remaining_seconds(
+    otp_time
+) -> int:
+    """
+    Return remaining OTP validity time.
+
+    Example:
+
+        275
+
+    means 275 seconds remaining.
+
+    Returns:
+
+        0 when expired.
+    """
+
+    if otp_time is None:
+
+        return 0
+
+    try:
+
+        elapsed_time = (
+            time.time()
+            - float(otp_time)
+        )
+
+        remaining = (
+            OTP_EXPIRY_SECONDS
+            - elapsed_time
+        )
+
+        return max(
+            0,
+            int(remaining)
+        )
+
+    except (
+        TypeError,
+        ValueError
+    ):
+
+        return 0
+
+
+# ============================================================
+# 9. SEND EMAIL OTP
 # ============================================================
 
 def send_email_otp(
@@ -183,18 +325,26 @@ def send_email_otp(
     """
     Send OTP through Gmail SMTP.
 
+    Parameters:
+
+        email:
+            Student email address.
+
+        otp:
+            Generated 6-digit OTP.
+
     Returns:
 
         (True, success message)
 
-    or
+    OR
 
         (False, error message)
     """
 
-    # -----------------------------------------
-    # Validate email
-    # -----------------------------------------
+    # --------------------------------------------------------
+    # Validate Email
+    # --------------------------------------------------------
 
     if not validate_email(email):
 
@@ -203,9 +353,9 @@ def send_email_otp(
             "Invalid email address."
         )
 
-    # -----------------------------------------
+    # --------------------------------------------------------
     # Validate OTP
-    # -----------------------------------------
+    # --------------------------------------------------------
 
     if not otp:
 
@@ -216,18 +366,18 @@ def send_email_otp(
 
     try:
 
-        # -------------------------------------
+        # ----------------------------------------------------
         # Email Subject
-        # -------------------------------------
+        # ----------------------------------------------------
 
         subject = (
             "PragyanAI Student Registration "
             "Verification OTP"
         )
 
-        # -------------------------------------
+        # ----------------------------------------------------
         # Email Body
-        # -------------------------------------
+        # ----------------------------------------------------
 
         body = f"""
 Hello,
@@ -252,9 +402,9 @@ AI Engineering & Career Programs
 Bangalore
 """
 
-        # -------------------------------------
+        # ----------------------------------------------------
         # Create Email
-        # -------------------------------------
+        # ----------------------------------------------------
 
         message = MIMEMultipart()
 
@@ -271,9 +421,9 @@ Bangalore
             )
         )
 
-        # -------------------------------------
+        # ----------------------------------------------------
         # Connect to Gmail SMTP
-        # -------------------------------------
+        # ----------------------------------------------------
 
         with smtplib.SMTP(
             SMTP_SERVER,
@@ -282,25 +432,36 @@ Bangalore
         ) as server:
 
             # Start TLS encryption
+
             server.starttls()
 
             # Login using Gmail App Password
+
             server.login(
                 EMAIL_ADDRESS,
                 EMAIL_APP_PASSWORD
             )
 
             # Send email
+
             server.sendmail(
                 EMAIL_ADDRESS,
                 email,
                 message.as_string()
             )
 
+        # ----------------------------------------------------
+        # Success
+        # ----------------------------------------------------
+
         return (
             True,
             "Email OTP sent successfully."
         )
+
+    # --------------------------------------------------------
+    # Gmail Authentication Error
+    # --------------------------------------------------------
 
     except smtplib.SMTPAuthenticationError:
 
@@ -310,12 +471,20 @@ Bangalore
             "Check EMAIL_ADDRESS and Gmail App Password."
         )
 
+    # --------------------------------------------------------
+    # SMTP Error
+    # --------------------------------------------------------
+
     except smtplib.SMTPException as e:
 
         return (
             False,
             f"SMTP error: {str(e)}"
         )
+
+    # --------------------------------------------------------
+    # General Error
+    # --------------------------------------------------------
 
     except Exception as e:
 
@@ -326,7 +495,7 @@ Bangalore
 
 
 # ============================================================
-# 8. SEND PHONE OTP
+# 10. SEND PHONE OTP
 # ============================================================
 
 def send_phone_otp(
@@ -342,9 +511,9 @@ def send_phone_otp(
         +919876543210
     """
 
-    # -----------------------------------------
-    # Validate phone
-    # -----------------------------------------
+    # --------------------------------------------------------
+    # Validate Phone
+    # --------------------------------------------------------
 
     if not validate_phone(phone):
 
@@ -357,9 +526,9 @@ def send_phone_otp(
 
     try:
 
-        # -------------------------------------
+        # ----------------------------------------------------
         # Send Verification
-        # -------------------------------------
+        # ----------------------------------------------------
 
         verification = (
             twilio_client
@@ -375,9 +544,9 @@ def send_phone_otp(
             )
         )
 
-        # -------------------------------------
-        # Check status
-        # -------------------------------------
+        # ----------------------------------------------------
+        # Check Status
+        # ----------------------------------------------------
 
         if verification.status == "pending":
 
@@ -392,12 +561,20 @@ def send_phone_otp(
             f"{verification.status}"
         )
 
+    # --------------------------------------------------------
+    # Twilio Error
+    # --------------------------------------------------------
+
     except TwilioRestException as e:
 
         return (
             False,
             f"Twilio error: {e.msg}"
         )
+
+    # --------------------------------------------------------
+    # General Error
+    # --------------------------------------------------------
 
     except Exception as e:
 
@@ -408,7 +585,7 @@ def send_phone_otp(
 
 
 # ============================================================
-# 9. VERIFY PHONE OTP
+# 11. VERIFY PHONE OTP
 # ============================================================
 
 def verify_phone_otp(
@@ -417,11 +594,19 @@ def verify_phone_otp(
 ) -> tuple[bool, str]:
     """
     Verify SMS OTP using Twilio Verify.
+
+    Returns:
+
+        (True, success message)
+
+    OR
+
+        (False, error message)
     """
 
-    # -----------------------------------------
-    # Validate phone
-    # -----------------------------------------
+    # --------------------------------------------------------
+    # Validate Phone
+    # --------------------------------------------------------
 
     if not validate_phone(phone):
 
@@ -430,9 +615,9 @@ def verify_phone_otp(
             "Invalid phone number."
         )
 
-    # -----------------------------------------
+    # --------------------------------------------------------
     # Validate OTP
-    # -----------------------------------------
+    # --------------------------------------------------------
 
     if not otp:
 
@@ -443,7 +628,14 @@ def verify_phone_otp(
 
     otp = otp.strip()
 
-    if not otp.isdigit() or len(otp) != OTP_LENGTH:
+    # --------------------------------------------------------
+    # OTP Must Be 6 Digits
+    # --------------------------------------------------------
+
+    if (
+        not otp.isdigit()
+        or len(otp) != OTP_LENGTH
+    ):
 
         return (
             False,
@@ -452,9 +644,9 @@ def verify_phone_otp(
 
     try:
 
-        # -------------------------------------
+        # ----------------------------------------------------
         # Verify OTP
-        # -------------------------------------
+        # ----------------------------------------------------
 
         verification_check = (
             twilio_client
@@ -470,9 +662,9 @@ def verify_phone_otp(
             )
         )
 
-        # -------------------------------------
+        # ----------------------------------------------------
         # Approved
-        # -------------------------------------
+        # ----------------------------------------------------
 
         if verification_check.status == "approved":
 
@@ -481,14 +673,18 @@ def verify_phone_otp(
                 "Phone number verified successfully."
             )
 
-        # -------------------------------------
-        # Not approved
-        # -------------------------------------
+        # ----------------------------------------------------
+        # Not Approved
+        # ----------------------------------------------------
 
         return (
             False,
             "Invalid or expired phone OTP."
         )
+
+    # --------------------------------------------------------
+    # Twilio Error
+    # --------------------------------------------------------
 
     except TwilioRestException as e:
 
@@ -496,6 +692,10 @@ def verify_phone_otp(
             False,
             f"Twilio verification error: {e.msg}"
         )
+
+    # --------------------------------------------------------
+    # General Error
+    # --------------------------------------------------------
 
     except Exception as e:
 
@@ -506,7 +706,7 @@ def verify_phone_otp(
 
 
 # ============================================================
-# 10. TEST CONFIGURATION
+# 12. TEST CONFIGURATION
 # ============================================================
 
 def check_configuration() -> dict:
@@ -514,7 +714,7 @@ def check_configuration() -> dict:
     Check whether Email and Twilio configuration
     has been loaded.
 
-    Does NOT expose secrets.
+    Does NOT expose secret values.
     """
 
     return {
@@ -531,6 +731,38 @@ def check_configuration() -> dict:
         )
 
     }
+
+
+# ============================================================
+# 13. GET CONFIGURATION STATUS MESSAGE
+# ============================================================
+
+def configuration_status() -> str:
+    """
+    Return a safe configuration status.
+
+    Secret values are never displayed.
+    """
+
+    config = check_configuration()
+
+    email_status = (
+        "Configured"
+        if config["email_configured"]
+        else "Not Configured"
+    )
+
+    twilio_status = (
+        "Configured"
+        if config["twilio_configured"]
+        else "Not Configured"
+    )
+
+    return (
+        f"Email: {email_status} | "
+        f"Twilio: {twilio_status}"
+    )
+
 
 # ============================================================
 # END OF otp_service.py
