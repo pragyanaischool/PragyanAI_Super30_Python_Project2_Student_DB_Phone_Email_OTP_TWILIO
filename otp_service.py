@@ -34,16 +34,15 @@ from email.mime.multipart import MIMEMultipart
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 
-
 # ============================================================
 # 1. LOAD SECRETS
 # ============================================================
 
 try:
 
-    EMAIL_ADDRESS = st.secrets["email"]["address"]
+    EMAIL_ADDRESS = st.secrets["EMAIL_ADDRESS"]
 
-    EMAIL_APP_PASSWORD = st.secrets["email"]["app_password"]
+    EMAIL_APP_PASSWORD = st.secrets["EMAIL_APP_PASSWORD"]
 
 except Exception as e:
 
@@ -55,13 +54,12 @@ except Exception as e:
 
 try:
 
-    TWILIO_ACCOUNT_SID = st.secrets["twilio"]["account_sid"]
+    TWILIO_ACCOUNT_SID = st.secrets["TWILIO_ACCOUNT_SID"]
 
-    TWILIO_AUTH_TOKEN = st.secrets["twilio"]["auth_token"]
+    TWILIO_AUTH_TOKEN = st.secrets["TWILIO_AUTH_TOKEN"]
 
     TWILIO_VERIFY_SERVICE_SID = (
-        st.secrets["twilio"]["verify_service_sid"]
-    )
+    st.secrets["TWILIO_VERIFY_SERVICE_SID"])
 
 except Exception as e:
 
