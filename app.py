@@ -53,7 +53,7 @@ def logout():
 # -------------------------------
 with st.sidebar:
     st.title(" PragyanAI")
-    st.image("")
+    st.image("PragyanAI_Transperent.png")
     st.caption("Student Registration & Verification")
     if st.session_state.role:
         st.success(f"Logged in as {st.session_state.role.title()}")
@@ -65,7 +65,7 @@ with st.sidebar:
 # -------------------------------
 def admin_dashboard():
     st.title(" Admin Dashboard")
-    st.image("")
+    st.image("PragyanAI_Transperent.png")
     st.write("Review verified student accounts and update approval status.")
 
     rows = list_students()
@@ -104,7 +104,7 @@ def admin_dashboard():
 def student_portal():
     row = get_student_by_email(st.session_state.student_email)
     st.title(" Student Portal")
-    st.image("")
+    st.image("PragyanAI_Transperent.png")
     if not row:
         st.error("Student account not found.")
         return
